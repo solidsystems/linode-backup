@@ -85,11 +85,12 @@ tar xzf linode-backup-myserver-20260212-143000.tar.gz
 ## How it works
 
 1. Tests SSH connectivity to the target server
-2. Pushes a self-contained collection script to the remote host (avoids hundreds of individual SSH round-trips)
-3. Executes the script remotely, streaming progress back to your terminal
-4. Compresses everything into a `.tar.gz` on the remote server
-5. SCPs the archive to your local machine
-6. Cleans up all temporary files on the remote server
+2. Checks for passwordless sudo — if available, the entire backup runs as root for full access to all files and databases
+3. Pushes a self-contained collection script to the remote host (avoids hundreds of individual SSH round-trips)
+4. Executes the script remotely, streaming progress back to your terminal
+5. Compresses everything into a `.tar.gz` on the remote server
+6. SCPs the archive to your local machine
+7. Cleans up all temporary files on the remote server
 
 The entire process is non-destructive — it only reads from the server and writes to `/tmp` for staging.
 
@@ -117,15 +118,17 @@ linode-backup-<hostname>-<date>/
 
 ## Database notes
 
-Database dumps attempt passwordless or socket-based authentication by default. If your databases require password authentication:
+When passwordless sudo is available, the script automatically escalates to root before running database dumps. This handles the common case where databases (especially MySQL/MariaDB) use unix socket authentication that only permits the root OS user to connect.
 
-- **MySQL/MariaDB**: The script tries a direct dump first, then falls back to `sudo mysqldump -u root` for systems using unix socket authentication. If both fail, create a `~/.my.cnf` on the server with credentials before running the backup:
+If your databases require additional configuration:
+
+- **MySQL/MariaDB**: Works automatically when running as root (via sudo or direct root SSH). If password authentication is required instead, create a `~/.my.cnf` on the server:
   ```ini
   [mysqldump]
   user=root
   password=yourpassword
   ```
-- **PostgreSQL**: The script runs `pg_dumpall` as the `postgres` user via sudo. Ensure the SSH user has sudo access.
+- **PostgreSQL**: The script runs `pg_dumpall` as the `postgres` user via sudo.
 - **MongoDB**: If auth is enabled, configure credentials in `/etc/mongod.conf` or pass them via environment variables.
 
 ## Security considerations
@@ -146,7 +149,7 @@ The resulting archive will contain sensitive material including database dumps, 
 
 **Remote server**: The script adapts to what's installed. It uses `rsync` when available for smarter file copying but falls back to `cp` otherwise. Database dumps only run if the respective CLI tools are present.
 
-**SSH access**: The SSH user needs read access to the files you want to back up. Running as `root` captures the most complete backup. If using a non-root user, some directories and database dumps may be skipped.
+**SSH access**: Running as `root` or as a user with passwordless sudo captures the most complete backup. The script automatically detects and uses passwordless sudo when available. If the SSH user has neither root access nor sudo, some directories and database dumps may be skipped.
 
 ## Limitations
 
