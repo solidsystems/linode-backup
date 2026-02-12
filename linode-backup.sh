@@ -88,6 +88,11 @@ REMOTE_SCRIPT=$(cat <<'REMOTE_EOF'
 #!/usr/bin/env bash
 set -uo pipefail
 
+# Escalate to root if possible (needed for DB dumps, full file access)
+if [[ $EUID -ne 0 ]] && sudo -n true 2>/dev/null; then
+    exec sudo bash "$0" "$@"
+fi
+
 STAGING="__STAGING__"
 mkdir -p "$STAGING"
 
@@ -567,7 +572,16 @@ echo "$REMOTE_SCRIPT" | ssh_cmd "cat > $REMOTE_SCRIPT_PATH && chmod +x $REMOTE_S
 
 # Run and capture output, looking for the archive path
 RESULT_FILE=$(mktemp)
-ssh_cmd "bash $REMOTE_SCRIPT_PATH" 2>&1 | while IFS= read -r line; do
+# Run as root if possible (sudo -n = non-interactive, won't hang waiting for password)
+if ssh_cmd "sudo -n true" &>/dev/null; then
+    REMOTE_RUN="sudo bash $REMOTE_SCRIPT_PATH"
+    info "Running as root via sudo"
+else
+    REMOTE_RUN="bash $REMOTE_SCRIPT_PATH"
+    warn "No passwordless sudo — running as $REMOTE_USER (some items may be skipped)"
+fi
+
+ssh_cmd "$REMOTE_RUN" 2>&1 | while IFS= read -r line; do
     if [[ "$line" == ARCHIVE_READY:* ]]; then
         echo "${line#ARCHIVE_READY:}" > "$RESULT_FILE"
     else
