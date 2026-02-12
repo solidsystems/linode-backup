@@ -119,7 +119,7 @@ linode-backup-<hostname>-<date>/
 
 Database dumps attempt passwordless or socket-based authentication by default. If your databases require password authentication:
 
-- **MySQL/MariaDB**: Create a `~/.my.cnf` on the server with credentials before running the backup:
+- **MySQL/MariaDB**: The script tries a direct dump first, then falls back to `sudo mysqldump -u root` for systems using unix socket authentication. If both fail, create a `~/.my.cnf` on the server with credentials before running the backup:
   ```ini
   [mysqldump]
   user=root

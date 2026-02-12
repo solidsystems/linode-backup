@@ -300,10 +300,13 @@ mkdir -p "$STAGING/databases"
 
 # MySQL / MariaDB
 if command -v mysqldump &>/dev/null; then
-    # Try passwordless first (socket auth), then skip if it fails
+    # Try direct first, then sudo root (for unix socket auth), then give up
     if mysqldump --all-databases --single-transaction --routines --triggers \
         > "$STAGING/databases/mysql-all-databases.sql" 2>/dev/null; then
         log "✓ MySQL/MariaDB dump (all databases)"
+    elif sudo mysqldump -u root --all-databases --single-transaction --routines --triggers \
+        > "$STAGING/databases/mysql-all-databases.sql" 2>/dev/null; then
+        log "✓ MySQL/MariaDB dump (all databases, via sudo)"
     else
         log "⚠ MySQL/MariaDB: could not dump (auth required — add credentials to ~/.my.cnf)"
         rm -f "$STAGING/databases/mysql-all-databases.sql"
